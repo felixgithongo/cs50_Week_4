@@ -1,0 +1,182 @@
+#include <stdio.h>
+#include <math.h>
+#include <stdlib.h>
+
+#include "helpers.h"
+
+// Convert image to grayscale
+void grayscale(int height, int width, RGBTRIPLE image[height][width])
+{
+    for (int i = 0; i < height; i++) // read every row, one at a time
+    {
+        for (int j = 0; j < width; j++) // every column of every row, one at a time
+        {
+            int avg = (int) round((image[i][j].rgbtBlue + image[i][j].rgbtGreen + image[i][j].rgbtRed) / 3); // fimd the average for the grayscale
+            // assign that average across the RGB scale
+            image[i][j].rgbtBlue = avg;
+            image[i][j].rgbtGreen = avg;
+            image[i][j].rgbtRed = avg;
+        }
+    }
+
+    return;
+}
+
+// Reflect image horizontally
+void reflect(int height, int width, RGBTRIPLE image[height][width])
+{
+    for (int i = 0; i < height; i++) // read every row, one at a time
+    {
+        for (int j = 0; j < (width/2); j++) // upto the middle column
+        {
+            RGBTRIPLE opp = image[i][j]; // create a struct that has the values of the row upto the middle column
+
+            image[i][j] = image[i][width - j-1]; // swap with the remaining columns with first to last logic
+
+            image[i][width - j-1] = opp; // fill the remaining pixels
+        }
+    }
+    return;
+}
+
+// Blur image
+void blur(int height, int width, RGBTRIPLE image[height][width])
+{
+    RGBTRIPLE copy[height][width];
+
+
+    for (int i = 0; i < height; i++)
+    {
+        for (int j = 0; j < width; j++)
+        {
+            copy [i][j] = image [i][j]; // Get a copy of the image
+        }
+    }
+
+    for (int i = 0; i < height; i++)
+    {
+        for (int j = 0; j < width; j++)
+        {
+            int red = 0, green = 0, blue = 0, count = 0; // initialize the trackers for each pixel
+
+            for (int li = -1; li <= 1; li++) // check the rows around [i][j]
+            {
+                for (int lj = -1; lj <= 1; lj++) // check the columns around [i][j]
+                {
+                    int ni = i + li;
+                    int nj = j + lj;
+
+                    if (ni > 0 && ni < height && nj > 0 && nj < width) // to avoid the out of bounds pixels
+                    {
+                        red = red + copy[ni][nj].rgbtRed; // add all the red of the surrounding pixels
+                        green = green + copy[ni][nj].rgbtGreen; // add all the green of the surrounding pixels
+                        blue = blue + copy[ni][nj].rgbtBlue; // add all the blue of the surrounding pixels
+                        count++; // Keep track for average purposes
+                    }
+                }
+            }
+            // Take the averages and assign them to the image, each pixel at a time
+            image[i][j].rgbtRed = (int) round(red) / count;
+            image[i][j].rgbtGreen = (int) round(green) / count;
+            image[i][j].rgbtBlue = (int) round(blue) / count;
+
+        }
+    }
+    return;
+}
+
+// Detect edges
+void edges(int height, int width, RGBTRIPLE image[height][width])
+{
+     RGBTRIPLE (*copy)[width + 2] = calloc (height + 2, (width + 2) * sizeof(RGBTRIPLE)); // create a copy with a ribbon around the pixels
+     if (copy == NULL)
+     {
+        printf("Not enough memory.\n");
+        return;
+     }
+
+     for (int i = 0; i < height + 2; i++) // initialize the new copy to be the NZ rugby team
+     {
+        for (int j = 0; j < width + 2; j++)
+        {
+            copy[i][j].rgbtRed = 0;
+            copy[i][j].rgbtGreen = 0;
+            copy[i][j].rgbtBlue = 0;
+        }
+     }
+
+    for (int i = 0; i < height; i++)
+    {
+        for (int j = 0; j < width; j++)
+        {
+            copy [i+1][j+1] = image [i][j]; // Get a copy of the image with the ribbon remaining all black
+        }
+    }
+
+        for (int i = 0; i < height; i++)
+        {
+            for (int j = 0; j < width; j++)
+            {
+                int Xred = 0, Xgreen = 0, Xblue = 0;  // initialize the trackers for each pixel for Gx
+                int Yred = 0, Ygreen = 0, Yblue = 0;  // initialize the trackers for each pixel for Gy
+
+
+                int Gx [3][3] = {
+                    {-1, 0, 1},
+                    {-2, 0, 2},
+                    {-1, 0, 1}
+                }; // initialize Gx
+                int Gy [3][3] = {
+                    {-1, -2, -1},
+                    {0, 0, 0},
+                    {1, 2, 1}
+                }; // initialize Gy
+
+                for (int li = -1; li <= 1; li++) // Going into the pixels
+                {
+                    for (int lj = -1; lj <= 1; lj++)
+                    {
+                        int Pred = copy[i + li + 1][j + lj + 1].rgbtRed; // +1 to start at the next pixel on both dimensions and avoid outer pixels for every pixel [i][j]
+                        int Pgreen = copy[i + li + 1][j + lj + 1].rgbtGreen;
+                        int Pblue = copy[i + li + 1][j + lj + 1].rgbtBlue;
+
+                        Xred += Pred * Gx[li + 1][lj + 1]; // multiply every pixel with the Gx values (+1) to get the relative position in the 3*3 pixels
+                        Yred += Pred * Gy[li + 1][lj + 1];
+
+                        Xgreen += Pgreen * Gx[li + 1][lj + 1];
+                        Ygreen += Pgreen * Gy[li + 1][lj + 1];
+
+                        Xblue += Pblue * Gx[li + 1][lj + 1];
+                        Yblue += Pblue * Gy[li + 1][lj + 1];
+                    }
+                }
+
+                    // Get the Sobel number
+                int red = (int) sqrt((Xred * Xred) + (Yred * Yred));
+                int green = (int) sqrt((Xgreen * Xgreen) + (Ygreen * Ygreen));
+                int blue = (int) sqrt((Xblue * Xblue) + (Yblue * Yblue));
+
+                if (red > 255)
+                {
+                    red = 255;
+                }
+                if (green > 255)
+                {
+                    green = 255;
+                }
+                if (blue > 255)
+                {
+                    blue = 255;
+                }
+
+
+                // Take the averages and assign them to the image, each pixel at a time
+                image[i][j].rgbtRed = red;
+                image[i][j].rgbtGreen = green;
+                image[i][j].rgbtBlue = blue;
+
+                }
+            }
+
+    return;
+}
